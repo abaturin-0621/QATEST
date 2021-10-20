@@ -1,0 +1,145 @@
+# Basic Airflow cluster configuration for CeleryExecutor with Redis and PostgreSQL.
+# WARNING: This configuration is for local development. Do not use it in a production deployment.
+# This configuration supports basic configuration using environment variables or an .env file
+# The following variables are supported:
+# AIRFLOW_IMAGE_NAME         - Docker image name used to run Airflow.
+#                              Default: apache/airflow:master-python3.8
+# AIRFLOW_UID                - User ID in Airflow containers
+#                              Default: 50000
+# AIRFLOW_GID                - Group ID in Airflow containers
+#                              Default: 50000
+# _AIRFLOW_WWW_USER_USERNAME - Username for the administrator account.
+#                              Default: airflow
+# _AIRFLOW_WWW_USER_PASSWORD - Password for the administrator account.
+#                              Default: airflow
+# Feel free to modify this file to suit your needs.
+---
+version: '3'
+x-airflow-common:
+  &airflow-common
+#  image: nexus.colvir.ru/sdh-core:latest-dev(?)prod
+  build: .
+  environment:
+    &airflow-common-env
+    # Настройки подключений к контейнерам.
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+
+    # Базовые настройки
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: '5'
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: 'Europe/Moscow'
+
+    # Для аутентификации frontend
+    AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.basic_auth
+    AIRFLOW__API__ACCESS_CONTROL_ALLOW_HEADERS: origin, content-type, accept, authorization
+    AIRFLOW__API__ACCESS_CONTROL_ALLOW_METHODS: POST, GET, OPTIONS, DELETE
+    AIRFLOW__API__ACCESS_CONTROL_ALLOW_ORIGIN: http://localhost:3000
+
+    # Принудительно сканировать все .py в dags/
+    # Нужно для (???)
+    AIRFLOW__CORE__DAG_DISCOVERY_SAFE_MODE: 'false'
+
+    # Группа задач "Интеграция plugins в docker и dag-factory"
+    # https://airflow.apache.org/docs/apache-airflow/stable/dag-serialization.html
+    AIRFLOW__CORE__STORE_SERIALIZED_DAGS: 'false'
+    AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '10'
+    AIRFLOW__CORE__LAZY_LOAD_PLUGINS: 'false'
+    #
+    AIRFLOW__WEBSERVER__RBAC: 'True'
+    AIRFLOW__WEBSERVER__RELOAD_ON_PLUGIN_CHANGE: 'true'
+
+
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    #    - ./work_with_libs:/opt/airflow/libs
+  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
+  depends_on:
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+  init:
+    <<: *airflow-common
+    container_name: sdh_init
+    command: version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+
+  webserver:
+    <<: *airflow-common
+    container_name: sdh_webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  scheduler:
+    <<: *airflow-common
+    container_name: sdh_scheduler
+    command: scheduler
+
+  worker:
+    <<: *airflow-common
+    container_name: sdh_worker
+    ports:
+      - "8793:8793"
+    command: celery worker
+
+  flower:
+    <<: *airflow-common
+    container_name: sdh_flower
+    command: celery flower
+    ports:
+      - "5555:5555"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  postgres:
+    build: ./postgres
+    container_name: sdh_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    container_name: sdh_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 50
+
+volumes:
+  postgres-db-volume:

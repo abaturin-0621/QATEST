@@ -1,0 +1,10 @@
+apache-airflow
+pysftp
+cx_Oracle
+SQLAlchemy
+lxml
+Flask
+flask_restx
+flask_expects_json
+flask_swagger_ui
+flask-cors
