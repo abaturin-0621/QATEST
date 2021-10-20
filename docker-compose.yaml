@@ -17,7 +17,6 @@
 version: '3'
 x-airflow-common:
   &airflow-common
-#  image: nexus.colvir.ru/sdh-core:latest-dev(?)prod
   build: .
   environment:
     &airflow-common-env
@@ -69,7 +68,7 @@ x-airflow-common:
 services:
   init:
     <<: *airflow-common
-    container_name: sdh_init
+    container_name: qa_init
     command: version
     environment:
       <<: *airflow-common-env
@@ -80,7 +79,7 @@ services:
 
   webserver:
     <<: *airflow-common
-    container_name: sdh_webserver
+    container_name: qa_webserver
     command: webserver
     ports:
       - "8080:8080"
@@ -92,19 +91,19 @@ services:
 
   scheduler:
     <<: *airflow-common
-    container_name: sdh_scheduler
+    container_name: qa_scheduler
     command: scheduler
 
   worker:
     <<: *airflow-common
-    container_name: sdh_worker
+    container_name: qa_worker
     ports:
       - "8793:8793"
     command: celery worker
 
   flower:
     <<: *airflow-common
-    container_name: sdh_flower
+    container_name: qa_flower
     command: celery flower
     ports:
       - "5555:5555"
@@ -116,7 +115,7 @@ services:
 
   postgres:
     build: ./postgres
-    container_name: sdh_postgres
+    container_name: qa_postgres
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -132,7 +131,7 @@ services:
 
   redis:
     image: redis:latest
-    container_name: sdh_redis
+    container_name: qa_redis
     ports:
       - "6379:6379"
     healthcheck:
