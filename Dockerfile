@@ -38,7 +38,7 @@ RUN echo 'export PATH="$PATH:/opt/oracle/instantclient_19_8"' >> ~/.bashrc && \
 COPY dags/ /opt/airflow/dags/
 COPY libs/ /opt/airflow/libs/
 COPY requirements.txt /opt/airflow/requirements.txt
-RUN cd libs && python setup.py sdist && cd ..
+# RUN cd libs && python setup.py sdist && cd ..
 
 # Airflow stuff
 USER airflow
