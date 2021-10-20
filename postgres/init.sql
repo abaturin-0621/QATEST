@@ -1,6 +1,6 @@
-create user sdh password 'sdh';
-create database sdh_db with owner sdh;
-grant connect, create, temporary on database sdh_db to sdh;
+create user qa password 'qa';
+create database qa_db with owner qa;
+grant connect, create, temporary on database qa_db to qa;
 
--- \connect sdh_db sdh
+
 
